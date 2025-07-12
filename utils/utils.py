@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 
 from torch import Tensor as Data
+from torch.nn.functional import softmax as probabilities_function
 from torch.nn import ReLU as ActivationFunction
 from torch.nn import Sequential as NeuralNetwork
 from torch.nn import Linear as FullyConnectedLayer
@@ -157,6 +158,39 @@ def predict(
         _, predicted = torch.max(output.data, 1) # կանխատեսման արդյունքը
     
     return predicted.item() # վերադարձնում ենք կանխատեսված դասը (թվանշանը)
+
+def predict_proba(
+    model,
+    image,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+):
+    model.eval()
+    
+    if isinstance(image, torch.Tensor):
+        # եթե պատկերն արդեն Tensor է, ապա պետք է միայն ձևափոխել չափսն ու հաշվարկային սարքը
+        if len(image.shape) == 1:
+            # եթե պատկերն արդեն 1D է
+            image = image.unsqueeze(0).to(device)
+        elif len(image.shape) == 2:
+            # խմբի չափողականությունն արդեն ավելացված է
+            image = image.view(image.size(0), -1).to(device)
+        else:
+            # պետք է ձևափոխել պատկերը 1D տեսքի ու ավելացնել խմբի չափ
+            image = image.view(1, -1).to(device)
+    else:
+        # ձևափոխում ենք պատկերը Tensor-ի
+        image = torch.tensor(image, dtype=torch.float32).view(1, -1).to(device)
+    
+    with torch.no_grad():
+        output = model(image)  # մոդելի կանխատեսում
+        
+        # ստանում ենք հավանականությունները
+        probabilities = probabilities_function(output, dim=1)
+        
+        # Ամենամեծ հավանականությունն ու դասը
+        max_prob, predicted = torch.max(probabilities, 1)
+    
+    return predicted.item(), max_prob.item()  # վերադարձնում ենք կանխատեսված դասը և հավանականությունը
 
 def visualize(
     image
