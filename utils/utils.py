@@ -223,5 +223,29 @@ def predict_custom_image(
     # Գուշակում
     predicted = predict_function(img_tensor)
     
-    return predicted, img  # վերադարձնում ենք կանխատեսված թվանշանը
+    return predicted # վերադարձնում ենք կանխատեսված թվանշանը
+
+def predict_custom_image_proba(
+    image_path,
+    predict_function
+):
+    # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
+    img = Image.open(image_path).convert('L')
     
+    # Նկարը փոքրացնենք 28x28 չափի
+    img = img.resize((28, 28))
+
+    # Նկարը վերածում ենք numpy զանգվածի
+    img_np = np.array(img)
+    
+    # Նկարը վերածում ենք PyTorch տ tensor-ի
+    img_tensor = torch.tensor(img_np, dtype=torch.float32).view(-1) / 255.0
+    
+    # Եթե նկարը եռամիաչափ է (գունավոր), ապա պակասացնենք չափողականությունը
+    if img_tensor.dim() == 3:
+        img_tensor = img_tensor.unsqueeze(0)
+    
+    # Գուշակում
+    probability, predicted = predict_function(img_tensor)
+    
+    return probability, predicted  # վերադարձնում ենք կանխատեսված հավանականությունն ու թվանշանը
