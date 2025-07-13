@@ -264,8 +264,7 @@ def load_image_from_url(url, label=None):
     response = requests.get(url)
     response.raise_for_status()
 
-    img = Image.open(io.BytesIO(response.content)).convert('L')
-    img = img.resize((28, 28))  # Փոքրացնում ենք նկարը 28x28 չափի
+    img = Image.open(io.BytesIO(response.content))
     if label is None:
         # Եթե պիտակ չկա, ապա օգտագործում ենք URL-ի վերջին հատվածը որպես ֆայլի անուն
         filename = url.split("/")[-1] or "downloaded_image.jpg"
