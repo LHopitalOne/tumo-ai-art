@@ -253,9 +253,18 @@ def predict_custom_image_proba(
     
     return probability, predicted  # վերադարձնում ենք կանխատեսված հավանականությունն ու թվանշանը
 
-def load_image_from_url(url):
+def load_image_from_url(url, label=None):
     """
     Ներբեռնում է նկարը URL-ից և վերածում այն մոխրագույն պատկեր
     """
-    img = Image.open(io.BytesIO(requests.get(url).content)).convert('L')
+    response = requests.get(url)
+    img = Image.open(response.content).convert('L')
+    img = img.resize((28, 28))  # Փոքրացնում ենք նկարը 28x28 չափի
+    if label is None:
+        # Եթե պիտակ չկա, ապա օգտագործում ենք URL-ի վերջին հատվածը որպես ֆայլի անուն
+        filename = url.split("/")[-1] or "downloaded_image.png"
+    else:
+        filename = str(label)
+    img.save(filename)  # պահում ենք որպես ժամանակավոր ֆայլ
+
     return img
