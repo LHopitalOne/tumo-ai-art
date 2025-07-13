@@ -253,9 +253,9 @@ def predict_custom_image_proba(
         img_tensor = img_tensor.unsqueeze(0)
     
     # Գուշակում
-    probability, predicted = predict_function(img_tensor)
+    predicted = predict_function(img_tensor)
     
-    return probability, predicted  # վերադարձնում ենք կանխատեսված հավանականությունն ու թվանշանը
+    return predicted  # վերադարձնում ենք կանխատեսված հավանականությունն ու թվանշանը
 
 def load_image_from_url(url, label=None):
     """
