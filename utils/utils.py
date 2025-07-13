@@ -1,3 +1,6 @@
+import io
+import requests
+
 from tqdm import tqdm
 
 from random import choice as randomly_choose_from
@@ -249,3 +252,10 @@ def predict_custom_image_proba(
     probability, predicted = predict_function(img_tensor)
     
     return probability, predicted  # վերադարձնում ենք կանխատեսված հավանականությունն ու թվանշանը
+
+def load_image_from_url(url):
+    """
+    Ներբեռնում է նկարը URL-ից և վերածում այն մոխրագույն պատկեր
+    """
+    img = Image.open(io.BytesIO(requests.get(url).content)).convert('L')
+    return img
