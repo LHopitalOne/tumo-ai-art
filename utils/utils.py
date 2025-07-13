@@ -205,7 +205,8 @@ def visualize(
 
 def predict_custom_image(
     image_path,
-    predict_function
+    predict_function,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ):
     # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
     img = Image.open(image_path).convert('L')
@@ -218,6 +219,7 @@ def predict_custom_image(
     
     # Նկարը վերածում ենք PyTorch տ tensor-ի
     img_tensor = torch.tensor(img_np, dtype=torch.float32).view(-1) / 255.0
+    img_tensor = img_tensor.to(device)
     
     # Եթե նկարը եռամիաչափ է (գունավոր), ապա պակասացնենք չափողականությունը
     if img_tensor.dim() == 3:
@@ -230,7 +232,8 @@ def predict_custom_image(
 
 def predict_custom_image_proba(
     image_path,
-    predict_function
+    predict_function,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ):
     # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
     img = Image.open(image_path).convert('L')
@@ -243,6 +246,7 @@ def predict_custom_image_proba(
     
     # Նկարը վերածում ենք PyTorch տ tensor-ի
     img_tensor = torch.tensor(img_np, dtype=torch.float32).view(-1) / 255.0
+    img_tensor = img_tensor.to(device)
     
     # Եթե նկարը եռամիաչափ է (գունավոր), ապա պակասացնենք չափողականությունը
     if img_tensor.dim() == 3:
