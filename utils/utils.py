@@ -262,7 +262,7 @@ def load_image_from_url(url, label=None):
     img = img.resize((28, 28))  # Փոքրացնում ենք նկարը 28x28 չափի
     if label is None:
         # Եթե պիտակ չկա, ապա օգտագործում ենք URL-ի վերջին հատվածը որպես ֆայլի անուն
-        filename = url.split("/")[-1] or "downloaded_image.png"
+        filename = url.split("/")[-1] or "downloaded_image.jpg"
     else:
         filename = str(label)
     img.save(filename)  # պահում ենք որպես ժամանակավոր ֆայլ
