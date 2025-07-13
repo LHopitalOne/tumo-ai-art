@@ -257,10 +257,10 @@ def predict_custom_image_proba(
         output = predict_function(img_tensor)  # մոդելի կանխատեսում
         
         # ստանում ենք հավանականությունները
-        probabilities = probabilities_function(output, dim=1)
+        probabilities = probabilities_function(output, dim=-1)
         
         # Ամենամեծ հավանականությունն ու դասը
-        max_prob, predicted = torch.max(probabilities, 1)
+        max_prob, predicted = torch.max(probabilities, -1)
     
     return predicted.item(), max_prob.item()  # վերադարձնում ենք կանխատեսված դասը և հավանականությունը
 
