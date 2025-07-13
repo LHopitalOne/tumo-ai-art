@@ -253,9 +253,16 @@ def predict_custom_image_proba(
         img_tensor = img_tensor.unsqueeze(0)
     
     # Գուշակում
-    predicted = predict_function(img_tensor)
+    with torch.no_grad():
+        output = predict_function(img_tensor)  # մոդելի կանխատեսում
+        
+        # ստանում ենք հավանականությունները
+        probabilities = probabilities_function(output, dim=1)
+        
+        # Ամենամեծ հավանականությունն ու դասը
+        max_prob, predicted = torch.max(probabilities, 1)
     
-    return predicted  # վերադարձնում ենք կանխատեսված հավանականությունն ու թվանշանը
+    return predicted.item(), max_prob.item()  # վերադարձնում ենք կանխատեսված դասը և հավանականությունը
 
 def load_image_from_url(url, label=None):
     """
