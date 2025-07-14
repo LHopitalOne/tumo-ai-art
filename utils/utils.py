@@ -59,15 +59,16 @@ def prepare_batch(images, labels, device, model_type='cnn'):
         device: Սարքը տվյալները տեղափոխելու համար
         model_type: 'cnn' կոնվոլյուցիոն համար, 'mlp' ամբողջությամب կապված համար
     """
-    # Move to device first to avoid memory issues
-    images = images.to(device)
-    labels = labels.to(device)
-    
     if model_type == 'mlp':
         # Հարթեցնել ամբողջությամբ կապված մոդելների համար
-        # For MLP, flatten the images from (batch_size, channels, height, width) to (batch_size, channels*height*width)
-        images = images.view(images.size(0), -1)
+        # For MLP, flatten the images from (batch_size, channels, height, width) to (batch_size, 784)
+        # MNIST images are 28x28=784 pixels
+        images = images.reshape(images.size(0), 784)
     # CNN-ի համար պահել բնօրինակ ձևը
+    
+    # Move to device after reshaping to avoid memory issues
+    images = images.to(device)
+    labels = labels.to(device)
     
     return images, labels
 
