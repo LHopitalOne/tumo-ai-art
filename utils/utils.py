@@ -29,75 +29,120 @@ from matplotlib.pyplot import plot as plot_graph
 from matplotlib.pyplot import show as show_graph
 from matplotlib.pyplot import imshow as show_image
 
-def prepare_data(
-    dataset
-):
-    # Տվյալները բաժանում ենք ուսուցման ու թեստավորման 
-    # համար՝ 80% ուսուցման և 20% թեստավորման (սովորաբար այս հարաբերակցությունն է ընդունված)
-    train_size = int(0.8 * len(dataset))
+def prepare_data(dataset, train_ratio=0.8):
+    """
+    Տվյալները բաժանում ենք ուսուցման ու թեստավորման համար
+    """
+    train_size = int(train_ratio * len(dataset))
     test_size = len(dataset) - train_size
-
     return random_split(dataset, [train_size, test_size])
 
+def get_device():
+    """Ամենալավ հասանելի սարքը ճանաչել"""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+def move_to_device(model, device=None):
+    """Մոդելը տեղափոխել նշված սարքի վրա"""
+    if device is None:
+        device = get_device()
+    return model.to(device), device
+
+def prepare_batch(images, labels, device, model_type='cnn'):
+    """
+    Խմբերը պատրաստել տարբեր մոդելների համար
+    
+    Args:
+        images: Մուտքային նկարներ
+        labels: Նպատակային պիտակներ
+        device: Սարքը տվյալները տեղափոխելու համար
+        model_type: 'cnn' կոնվոլյուցիոն համար, 'mlp' ամբողջությամب կապված համար
+    """
+    if model_type == 'mlp':
+        # Հարթեցնել ամբողջությամբ կապված մոդելների համար
+        images = images.view(images.size(0), -1)
+    # CNN-ի համար պահել բնօրինակ ձևը
+    
+    return images.to(device), labels.to(device)
+
 def train_model(
-        model,
-        train_dataset,
-        test_dataset,
-        loss_function,
-        optimizer,
-        batch_size=64,
-        epochs=10,
-        device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    ):
+    model,
+    train_dataset,
+    test_dataset,
+    loss_function,
+    optimizer,
+    batch_size=64,
+    epochs=10,
+    device=None,
+    model_type='cnn',
+    print_every=1
+):
+    """
+    Մոդել սովորեցնել ճկուն սարքային աջակցությամբ
+    """
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
+    print(f"Սովորեցնում ենք սարքի վրա: {device}")
+    
     train_accuracy_history = []  # պահելու ենք ուսուցման ճշգրտության պատմությունը
     test_accuracy_history = []  # պահելու ենք թեստավորման ճշգրտության պատմությունը
-
+    
     # dataloader-ներով ենք «կերակրում» մոդելը սովորելու ընթացքում
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
-
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    
     # Մոդելը սովորեցնում ենք շրջանների ընթացքում
     for epoch in range(epochs):
         model.train()
         correct_train = 0
         total_train = 0
-        progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc=f"Շրջան {epoch+1}/{epochs}", leave=False)
+        running_loss = 0.0
+        
+        progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader), 
+                          desc=f"Շրջան {epoch+1}/{epochs}", leave=False)
         
         # Մոդելի ուսուցում՝ տվյալների ավելի փոքր խմբերով
         for batch_idx, (images, labels) in progress_bar:
-            images = images.view(images.size(0), -1).to(device)
-            labels = labels.to(device)
-
+            images, labels = prepare_batch(images, labels, device, model_type)
+            
             optimizer.zero_grad()
             outputs = model(images)
             loss = loss_function(outputs, labels)
-
+            
             loss.backward()
             optimizer.step()
-
-            _, predicted = torch.max(outputs.data, 1) # ընթացիկ կանխատեսում
+            
+            running_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)  # ընթացիկ կանխատեսում
             total_train += labels.size(0)
-            correct_train += (predicted == labels).sum().item() # համեմատում ճշմարտության հետ
-
-            current_acc = correct_train / total_train * 100 # ընթացիկ ճշգրտություն
+            correct_train += (predicted == labels).sum().item()  # համեմատում ճշմարտության հետ
+            
+            current_acc = correct_train / total_train * 100  # ընթացիկ ճշգրտություն
             progress_bar.set_postfix({
                 "Խումբ": batch_idx + 1,
-                "Ճշտություն": f"{current_acc:.2f}%"
+                "Ճշտություն": f"{current_acc:.2f}%",
             })
-
+        
         train_accuracy = correct_train / total_train * 100
         train_accuracy_history.append(train_accuracy)
         
+        # Վավերացման գնահատում
         model.eval()
         correct_val = 0
         total_val = 0
+        val_loss = 0.0
         
         with torch.no_grad():
             for images, labels in test_dataloader:
-                images = images.view(images.size(0), -1).to(device)
-                labels = labels.to(device)
+                images, labels = prepare_batch(images, labels, device, model_type)
                 outputs = model(images)
+                loss = loss_function(outputs, labels)
                 
+                val_loss += loss.item()
                 _, predicted = torch.max(outputs.data, 1)
                 total_val += labels.size(0)
                 correct_val += (predicted == labels).sum().item()
@@ -105,62 +150,125 @@ def train_model(
         val_accuracy = correct_val / total_val * 100
         test_accuracy_history.append(val_accuracy)
         
-        print(f"Շրջան {epoch+1}/{epochs} - Սովորելու Ճշտություն՝ {train_accuracy:.2f}% | Վավերացման Ճշտություն՝ {val_accuracy:.2f}%")
-
+        if (epoch + 1) % print_every == 0:
+            print(f"Շրջան {epoch+1}/{epochs} - Սովորելու Ճշտություն՝ {train_accuracy:.2f}% | "
+                  f"Վավերացման Ճշտություն՝ {val_accuracy:.2f}%")
+    
     return train_accuracy_history, test_accuracy_history
 
 def test(
     model,
     test_dataset,
     batch_size=64,
-    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device=None,
+    model_type='cnn'
 ):
+    """
+    Մոդելի վերջնական ստուգում
+    """
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
+    
     # վերջնական ստուգում
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
+    
     model.eval()
     correct = 0
     total = 0
     
     with torch.no_grad():
         for images, labels in test_dataloader:
-            images = images.view(images.size(0), -1).to(device)
-            labels = labels.to(device)
+            images, labels = prepare_batch(images, labels, device, model_type)
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     
     accuracy = correct / total * 100
+    print(f"Վերջնական ճշգրտություն: {accuracy:.2f}%")
     return accuracy
 
 def predict(
     model,
     image,
-    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device=None,
+    model_type='cnn'
 ):
+    """
+    Մոդելի կանխատեսում տրված պատկերի համար
+    
+    Args:
+        model: Մոդել
+        image: Պատկեր (կարող է լինել tensor, numpy array, կամ list)
+        device: Սարք (ավտոմատ որոշվում է եթե None)
+        model_type: Մոդելի տեսակ ('cnn' կամ 'mlp')
+    
+    Returns:
+        Կանխատեսված դասը
+    """
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
     model.eval()
     
     if isinstance(image, torch.Tensor):
-        # եթե պատկերն արդեն Tensor է, ապա պետք է միայն ձևափոխել չափսն ու հաշվարկային սարքը
-        if len(image.shape) == 1:
-            # եթե պատկերն արդեն 1D է
-            image = image.unsqueeze(0).to(device)
-        elif len(image.shape) == 2:
-            # խմբի չափողականությունն արդեն ավելացված է
-            image = image.view(image.size(0), -1).to(device)
-        else:
-            # պետք է ձևափոխել պատկերը 1D տեսքի ու ավելացնել խմբի չափ
-            image = image.view(1, -1).to(device)
+        # եթե պատկերն արդեն Tensor է
+        image_tensor = image.clone()
+        
+        if model_type == 'cnn':
+            # CNN համար պետք է ճիշտ ձևաչափ
+            if len(image_tensor.shape) == 1:
+                # 1D -> վերաձևավորում (1, 1, 28, 28) ենթադրելով 28x28 պատկեր
+                size = int(image_tensor.numel() ** 0.5)
+                image_tensor = image_tensor.view(1, 1, size, size)
+            elif len(image_tensor.shape) == 2:
+                # 2D -> ավելացնել խմբի և ալիքի չափերը
+                if image_tensor.size(0) == 1:
+                    # Արդեն ունի խմբի չափ
+                    size = int(image_tensor.size(1) ** 0.5)
+                    image_tensor = image_tensor.view(1, 1, size, size)
+                else:
+                    # Չունի խմբի չափ
+                    image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
+            elif len(image_tensor.shape) == 3:
+                # 3D -> ավելացնել խմբի չափ, եթե անհրաժեշտ է
+                if image_tensor.size(0) != 1:
+                    image_tensor = image_tensor.unsqueeze(0)
+        else:  # MLP
+            # MLP համար հարթեցնել
+            if len(image_tensor.shape) == 1:
+                image_tensor = image_tensor.unsqueeze(0)
+            else:
+                image_tensor = image_tensor.view(1, -1)
+                
+        image_tensor = image_tensor.to(device)
     else:
         # ձևափոխում ենք պատկերը Tensor-ի
-        image = torch.tensor(image, dtype=torch.float32).view(1, -1).to(device)
+        image_tensor = torch.tensor(image, dtype=torch.float32)
+        
+        if model_type == 'cnn':
+            # CNN համար
+            if len(image_tensor.shape) == 1:
+                size = int(image_tensor.numel() ** 0.5)
+                image_tensor = image_tensor.view(1, 1, size, size)
+            else:
+                image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
+        else:  # MLP
+            # MLP համար հարթեցնել
+            image_tensor = image_tensor.view(1, -1)
+            
+        image_tensor = image_tensor.to(device)
     
     with torch.no_grad():
-        output = model(image) # մոդելի կանխատեսում
-        _, predicted = torch.max(output.data, 1) # կանխատեսման արդյունքը
+        output = model(image_tensor)  # մոդելի կանխատեսում
+        _, predicted = torch.max(output.data, 1)  # կանխատեսման արդյունքը
     
-    return predicted.item() # վերադարձնում ենք կանխատեսված դասը (թվանշանը)
+    return predicted.item()  # վերադարձնում ենք կանխատեսված դասը (թվանշանը)
 
 def predict_proba(
     model,
@@ -205,62 +313,125 @@ def visualize(
 
 def predict_custom_image(
     image_path,
-    predict_function,
-    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model,
+    device=None,
+    model_type='cnn',
+    image_size=(28, 28)
 ):
+    """
+    Անհատական նկարի կանխատեսում
+    
+    Args:
+        image_path: Նկարի ճանապահը
+        model: Մոդել
+        device: Սարք (ավտոմատ որոշվում է եթե None)
+        model_type: Մոդելի տեսակ ('cnn' կամ 'mlp')
+        image_size: Նկարի չափը (լռությամբ 28x28)
+    
+    Returns:
+        Կանխատեսված դասը
+    """
+    from PIL import Image
+    import numpy as np
+    
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
+    
     # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
     img = Image.open(image_path).convert('L')
     
-    # Նկարը փոքրացնենք 28x28 չափի
-    img = img.resize((28, 28))
-
+    # Նկարը փոքրացնենք նշված չափի
+    img = img.resize(image_size)
+    
     # Նկարը վերածում ենք numpy զանգվածի
     img_np = np.array(img)
     
-    # Նկարը վերածում ենք PyTorch տ tensor-ի
-    img_tensor = torch.tensor(img_np, dtype=torch.float32).view(-1) / 255.0
+    # Նկարը վերածում ենք PyTorch tensor-ի
+    img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
+    
+    # Ձևափոխում ըստ մոդելի տեսակի
+    if model_type == 'cnn':
+        # CNN համար: (1, 1, height, width)
+        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
+    else:  # MLP համար
+        # MLP համար: հարթեցնել
+        img_tensor = img_tensor.view(1, -1)
+    
     img_tensor = img_tensor.to(device)
     
-    # Եթե նկարը եռամիաչափ է (գունավոր), ապա պակասացնենք չափողականությունը
-    if img_tensor.dim() == 3:
-        img_tensor = img_tensor.unsqueeze(0)
-    
     # Գուշակում
-    predicted = predict_function(img_tensor)
+    model.eval()
+    with torch.no_grad():
+        output = model(img_tensor)
+        _, predicted = torch.max(output, 1)
     
-    return predicted # վերադարձնում ենք կանխատեսված թվանշանը
+    return predicted.item()  # վերադարձնում ենք կանխատեսված թվանշանը
 
 def predict_custom_image_proba(
     image_path,
-    predict_function,
-    device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model,
+    device=None,
+    model_type='cnn',
+    image_size=(28, 28)
 ):
+    """
+    Անհատական նկարի կանխատեսում հավանականությունների հետ
+    
+    Args:
+        image_path: Նկարի ճանապահը
+        model: Մոդել
+        device: Սարք (ավտոմատ որոշվում է եթե None)
+        model_type: Մոդելի տեսակ ('cnn' կամ 'mlp')
+        image_size: Նկարի չափը (լռությամբ 28x28)
+    
+    Returns:
+        Կանխատեսված դասը և հավանականությունը
+    """
+    from PIL import Image
+    import numpy as np
+    import torch.nn.functional as F
+    
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
+    
     # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
     img = Image.open(image_path).convert('L')
     
-    # Նկարը փոքրացնենք 28x28 չափի
-    img = img.resize((28, 28))
-
+    # Նկարը փոքրացնենք նշված չափի
+    img = img.resize(image_size)
+    
     # Նկարը վերածում ենք numpy զանգվածի
     img_np = np.array(img)
     
-    # Նկարը վերածում ենք PyTorch տ tensor-ի
-    img_tensor = torch.tensor(img_np, dtype=torch.float32).view(-1) / 255.0
+    # Նկարը վերածում ենք PyTorch tensor-ի
+    img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
+    
+    # Ձևափոխում ըստ մոդելի տեսակի
+    if model_type == 'cnn':
+        # CNN համար: (1, 1, height, width)
+        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
+    else:  # MLP համար
+        # MLP համար: հարթեցնել
+        img_tensor = img_tensor.view(1, -1)
+    
     img_tensor = img_tensor.to(device)
     
-    # Եթե նկարը եռամիաչափ է (գունավոր), ապա պակասացնենք չափողականությունը
-    if img_tensor.dim() == 3:
-        img_tensor = img_tensor.unsqueeze(0)
-    
     # Գուշակում
+    model.eval()
     with torch.no_grad():
-        output = predict_function(img_tensor)  # մոդելի կանխատեսում
+        output = model(img_tensor)
         
         # ստանում ենք հավանականությունները
-        probabilities = probabilities_function(output, dim=-1)
+        probabilities = F.softmax(output, dim=1)
         
         # Ամենամեծ հավանականությունն ու դասը
-        max_prob, predicted = torch.max(probabilities, -1)
+        max_prob, predicted = torch.max(probabilities, 1)
     
     return predicted.item(), max_prob.item()  # վերադարձնում ենք կանխատեսված դասը և հավանականությունը
 
