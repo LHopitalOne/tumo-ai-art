@@ -75,12 +75,6 @@ def prepare_batch(images, labels, device, model_type='cnn'):
             # Resize to 224x224 if not already
             import torch.nn.functional as F
             images = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
-        
-        # VGG19 expects 3 channels, but we might have 1 channel (grayscale)
-        if images.size(1) == 1:
-            # Convert grayscale to RGB by repeating the channel
-            images = images.repeat(1, 3, 1, 1)
-    # CNN-ի համար պահել բնօրինակ ձևը
     
     return images, labels
 
@@ -282,10 +276,6 @@ def predict(
             if image_tensor.size(2) != 224 or image_tensor.size(3) != 224:
                 import torch.nn.functional as F
                 image_tensor = F.interpolate(image_tensor, size=(224, 224), mode='bilinear', align_corners=False)
-            
-            # Convert grayscale to RGB for VGG19
-            if image_tensor.size(1) == 1:
-                image_tensor = image_tensor.repeat(1, 3, 1, 1)
                 
         elif model_type == 'cnn':
             # CNN համար պետք է ճիշտ ձևաչափ
@@ -330,10 +320,6 @@ def predict(
             if image_tensor.size(2) != 224 or image_tensor.size(3) != 224:
                 import torch.nn.functional as F
                 image_tensor = F.interpolate(image_tensor, size=(224, 224), mode='bilinear', align_corners=False)
-            
-            # Convert to RGB
-            if image_tensor.size(1) == 1:
-                image_tensor = image_tensor.repeat(1, 3, 1, 1)
                 
         elif model_type == 'cnn':
             # CNN համար
@@ -405,7 +391,6 @@ def predict_custom_image(
     if model_type == 'vgg19':
         # VGG19 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
         img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
-        img_tensor = img_tensor.repeat(1, 3, 1, 1)  # Convert grayscale to RGB
     elif model_type == 'cnn':
         # CNN համար: (1, 1, height, width)
         img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
@@ -475,7 +460,6 @@ def predict_custom_image_proba(
     if model_type == 'vgg19':
         # VGG19 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
         img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
-        img_tensor = img_tensor.repeat(1, 3, 1, 1)  # Convert grayscale to RGB
     elif model_type == 'cnn':
         # CNN համար: (1, 1, height, width)
         img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
