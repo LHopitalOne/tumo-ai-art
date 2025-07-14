@@ -57,7 +57,7 @@ def prepare_batch(images, labels, device, model_type='cnn'):
         images: Մուտքային նկարներ
         labels: Նպատակային պիտակներ
         device: Սարքը տվյալները տեղափոխելու համար
-        model_type: 'cnn' կոնվոլյուցիոն համար, 'mlp' ամբողջությամب կապված համար, 'vgg19' VGG19 համար
+        model_type: 'cnn' կոնվոլյուցիոն համար, 'mlp' ամբողջությամب կապված համար, 'vgg16' VGG16 համար
     """
     # Move to device first
     images = images.to(device)
@@ -69,8 +69,8 @@ def prepare_batch(images, labels, device, model_type='cnn'):
         # MNIST images are 28x28=784 pixels
         batch_size = images.size(0)
         images = images.view(batch_size, -1)  # This will flatten to (batch_size, 784)
-    elif model_type == 'vgg19':
-        # VGG19 համար ապահովում ենք 224x224 չափը
+    elif model_type == 'vgg16':
+        # VGG16 համար ապահովում ենք 224x224 չափը
         if images.size(2) != 224 or images.size(3) != 224:
             # Resize to 224x224 if not already
             import torch.nn.functional as F
@@ -78,13 +78,13 @@ def prepare_batch(images, labels, device, model_type='cnn'):
     
     return images, labels
 
-def create_vgg19_transforms(input_size=(28, 28), target_size=(224, 224)):
+def create_vgg16_transforms(input_size=(28, 28), target_size=(224, 224)):
     """
-    VGG19 համար անհրաժեշտ transform-ներ ստեղծել
+    VGG16 համար անհրաժեշտ transform-ներ ստեղծել
     
     Args:
         input_size: Մուտքային նկարի չափը
-        target_size: Նպատակային չափը VGG19 համար
+        target_size: Նպատակային չափը VGG16 համար
     
     Returns:
         Transform pipeline
@@ -130,8 +130,8 @@ def train_model(
     test_accuracy_history = []  # պահելու ենք թեստավորման ճշգրտության պատմությունը
     
     # dataloader-ներով ենք «կերակրում» մոդելը սովորելու ընթացքում
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True, persistent_workers=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
     
     # Մոդելը սովորեցնում ենք շրջանների ընթացքում
     for epoch in range(epochs):
@@ -211,7 +211,7 @@ def test(
     model, device = move_to_device(model, device)
     
     # վերջնական ստուգում
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
     
     model.eval()
     correct = 0
@@ -242,7 +242,7 @@ def predict(
         model: Մոդել
         image: Պատկեր (կարող է լինել tensor, numpy array, կամ list)
         device: Սարք (ավտոմատ որոշվում է եթե None)
-        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg19')
+        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg16')
     
     Returns:
         Կանխատեսված դասը
@@ -258,8 +258,8 @@ def predict(
         # եթե պատկերն արդեն Tensor է
         image_tensor = image.clone()
         
-        if model_type == 'vgg19':
-            # VGG19 համար ապահովում ենք ճիշտ ձևաչափը
+        if model_type == 'vgg16':
+            # VGG16 համար ապահովում ենք ճիշտ ձևաչափը
             if len(image_tensor.shape) == 1:
                 # 1D -> վերաձևավորում (1, 1, 28, 28) ենթադրելով 28x28 պատկեր
                 size = int(image_tensor.numel() ** 0.5)
@@ -272,7 +272,7 @@ def predict(
                 if image_tensor.size(0) != 1:
                     image_tensor = image_tensor.unsqueeze(0)
             
-            # Resize to 224x224 for VGG19
+            # Resize to 224x224 for VGG16
             if image_tensor.size(2) != 224 or image_tensor.size(3) != 224:
                 import torch.nn.functional as F
                 image_tensor = F.interpolate(image_tensor, size=(224, 224), mode='bilinear', align_corners=False)
@@ -308,8 +308,8 @@ def predict(
         # ձևափոխում ենք պատկերը Tensor-ի
         image_tensor = torch.tensor(image, dtype=torch.float32)
         
-        if model_type == 'vgg19':
-            # VGG19 համար
+        if model_type == 'vgg16':
+            # VGG16 համար
             if len(image_tensor.shape) == 1:
                 size = int(image_tensor.numel() ** 0.5)
                 image_tensor = image_tensor.view(1, 1, size, size)
@@ -354,8 +354,8 @@ def predict_custom_image(
         image_path: Նկարի ճանապահը
         model: Մոդել
         device: Սարք (ավտոմատ որոշվում է եթե None)
-        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg19')
-        image_size: Նկարի չափը (լռությամբ 28x28, բայց VGG19 համար կօգտագործվի 224x224)
+        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg16')
+        image_size: Նկարի չափը (լռությամբ 28x28, բայց VGG16 համար կօգտագործվի 224x224)
     
     Returns:
         Կանխատեսված դասը
@@ -372,8 +372,8 @@ def predict_custom_image(
     # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
     img = Image.open(image_path).convert('L')
     
-    # VGG19 համար օգտագործում ենք 224x224 չափը
-    if model_type == 'vgg19':
+    # VGG16 համար օգտագործում ենք 224x224 չափը
+    if model_type == 'vgg16':
         target_size = (224, 224)
     else:
         target_size = image_size
@@ -388,8 +388,8 @@ def predict_custom_image(
     img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
     
     # Ձևափոխում ըստ մոդելի տեսակի
-    if model_type == 'vgg19':
-        # VGG19 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
+    if model_type == 'vgg16':
+        # VGG16 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
         img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
     elif model_type == 'cnn':
         # CNN համար: (1, 1, height, width)
@@ -422,8 +422,8 @@ def predict_custom_image_proba(
         image_path: Նկարի ճանապահը
         model: Մոդել
         device: Սարք (ավտոմատ որոշվում է եթե None)
-        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg19')
-        image_size: Նկարի չափը (լռությամբ 28x28, բայց VGG19 համար կօգտագործվի 224x224)
+        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg16')
+        image_size: Նկարի չափը (լռությամբ 28x28, բայց VGG16 համար կօգտագործվի 224x224)
     
     Returns:
         Կանխատեսված դասը և հավանականությունը
@@ -441,8 +441,8 @@ def predict_custom_image_proba(
     # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
     img = Image.open(image_path).convert('L')
     
-    # VGG19 համար օգտագործում ենք 224x224 չափը
-    if model_type == 'vgg19':
+    # VGG16 համար օգտագործում ենք 224x224 չափը
+    if model_type == 'vgg16':
         target_size = (224, 224)
     else:
         target_size = image_size
@@ -457,8 +457,8 @@ def predict_custom_image_proba(
     img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
     
     # Ձևափոխում ըստ մոդելի տեսակի
-    if model_type == 'vgg19':
-        # VGG19 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
+    if model_type == 'vgg16':
+        # VGG16 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
         img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
     elif model_type == 'cnn':
         # CNN համար: (1, 1, height, width)
