@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import random_split
 
 from torchvision.datasets import MNIST as digits_dataset
-from torchvision.transforms import ToTensor
+from torchvision.transforms import ToTensor, Resize, Compose, Normalize
 
 from matplotlib.pyplot import plot as plot_graph
 from matplotlib.pyplot import show as show_graph
@@ -57,7 +57,7 @@ def prepare_batch(images, labels, device, model_type='cnn'):
         images: Մուտքային նկարներ
         labels: Նպատակային պիտակներ
         device: Սարքը տվյալները տեղափոխելու համար
-        model_type: 'cnn' կոնվոլյուցիոն համար, 'mlp' ամբողջությամب կապված համար
+        model_type: 'cnn' կոնվոլյուցիոն համար, 'mlp' ամբողջությամب կապված համար, 'vgg19' VGG19 համար
     """
     # Move to device first
     images = images.to(device)
@@ -69,9 +69,46 @@ def prepare_batch(images, labels, device, model_type='cnn'):
         # MNIST images are 28x28=784 pixels
         batch_size = images.size(0)
         images = images.view(batch_size, -1)  # This will flatten to (batch_size, 784)
+    elif model_type == 'vgg19':
+        # VGG19 համար ապահովում ենք 224x224 չափը
+        if images.size(2) != 224 or images.size(3) != 224:
+            # Resize to 224x224 if not already
+            import torch.nn.functional as F
+            images = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
+        
+        # VGG19 expects 3 channels, but we might have 1 channel (grayscale)
+        if images.size(1) == 1:
+            # Convert grayscale to RGB by repeating the channel
+            images = images.repeat(1, 3, 1, 1)
     # CNN-ի համար պահել բնօրինակ ձևը
     
     return images, labels
+
+def create_vgg19_transforms(input_size=(28, 28), target_size=(224, 224)):
+    """
+    VGG19 համար անհրաժեշտ transform-ներ ստեղծել
+    
+    Args:
+        input_size: Մուտքային նկարի չափը
+        target_size: Նպատակային չափը VGG19 համար
+    
+    Returns:
+        Transform pipeline
+    """
+    transforms = []
+    
+    # Resize from input_size to target_size
+    if input_size != target_size:
+        transforms.append(Resize(target_size))
+    
+    # Convert to tensor
+    transforms.append(ToTensor())
+    
+    # Normalize for better training (optional but recommended)
+    # Using ImageNet normalization values adapted for grayscale
+    transforms.append(Normalize(mean=[0.485], std=[0.229]))
+    
+    return Compose(transforms)
 
 def train_model(
     model,
@@ -211,7 +248,7 @@ def predict(
         model: Մոդել
         image: Պատկեր (կարող է լինել tensor, numpy array, կամ list)
         device: Սարք (ավտոմատ որոշվում է եթե None)
-        model_type: Մոդելի տեսակ ('cnn' կամ 'mlp')
+        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg19')
     
     Returns:
         Կանխատեսված դասը
@@ -227,7 +264,30 @@ def predict(
         # եթե պատկերն արդեն Tensor է
         image_tensor = image.clone()
         
-        if model_type == 'cnn':
+        if model_type == 'vgg19':
+            # VGG19 համար ապահովում ենք ճիշտ ձևաչափը
+            if len(image_tensor.shape) == 1:
+                # 1D -> վերաձևավորում (1, 1, 28, 28) ենթադրելով 28x28 պատկեր
+                size = int(image_tensor.numel() ** 0.5)
+                image_tensor = image_tensor.view(1, 1, size, size)
+            elif len(image_tensor.shape) == 2:
+                # 2D -> ավելացնել խմբի և ալիքի չափերը
+                image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
+            elif len(image_tensor.shape) == 3:
+                # 3D -> ավելացնել խմբի չափ
+                if image_tensor.size(0) != 1:
+                    image_tensor = image_tensor.unsqueeze(0)
+            
+            # Resize to 224x224 for VGG19
+            if image_tensor.size(2) != 224 or image_tensor.size(3) != 224:
+                import torch.nn.functional as F
+                image_tensor = F.interpolate(image_tensor, size=(224, 224), mode='bilinear', align_corners=False)
+            
+            # Convert grayscale to RGB for VGG19
+            if image_tensor.size(1) == 1:
+                image_tensor = image_tensor.repeat(1, 3, 1, 1)
+                
+        elif model_type == 'cnn':
             # CNN համար պետք է ճիշտ ձևաչափ
             if len(image_tensor.shape) == 1:
                 # 1D -> վերաձևավորում (1, 1, 28, 28) ենթադրելով 28x28 պատկեր
@@ -258,7 +318,24 @@ def predict(
         # ձևափոխում ենք պատկերը Tensor-ի
         image_tensor = torch.tensor(image, dtype=torch.float32)
         
-        if model_type == 'cnn':
+        if model_type == 'vgg19':
+            # VGG19 համար
+            if len(image_tensor.shape) == 1:
+                size = int(image_tensor.numel() ** 0.5)
+                image_tensor = image_tensor.view(1, 1, size, size)
+            else:
+                image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
+            
+            # Resize to 224x224
+            if image_tensor.size(2) != 224 or image_tensor.size(3) != 224:
+                import torch.nn.functional as F
+                image_tensor = F.interpolate(image_tensor, size=(224, 224), mode='bilinear', align_corners=False)
+            
+            # Convert to RGB
+            if image_tensor.size(1) == 1:
+                image_tensor = image_tensor.repeat(1, 3, 1, 1)
+                
+        elif model_type == 'cnn':
             # CNN համար
             if len(image_tensor.shape) == 1:
                 size = int(image_tensor.numel() ** 0.5)
@@ -277,6 +354,151 @@ def predict(
     
     return predicted.item()  # վերադարձնում ենք կանխատեսված դասը (թվանշանը)
 
+def predict_custom_image(
+    image_path,
+    model,
+    device=None,
+    model_type='cnn',
+    image_size=(28, 28)
+):
+    """
+    Անհատական նկարի կանխատեսում
+    
+    Args:
+        image_path: Նկարի ճանապահը
+        model: Մոդել
+        device: Սարք (ավտոմատ որոշվում է եթե None)
+        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg19')
+        image_size: Նկարի չափը (լռությամբ 28x28, բայց VGG19 համար կօգտագործվի 224x224)
+    
+    Returns:
+        Կանխատեսված դասը
+    """
+    from PIL import Image
+    import numpy as np
+    
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
+    
+    # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
+    img = Image.open(image_path).convert('L')
+    
+    # VGG19 համար օգտագործում ենք 224x224 չափը
+    if model_type == 'vgg19':
+        target_size = (224, 224)
+    else:
+        target_size = image_size
+    
+    # Նկարը փոքրացնենք նշված չափի
+    img = img.resize(target_size)
+    
+    # Նկարը վերածում ենք numpy զանգվածի
+    img_np = np.array(img)
+    
+    # Նկարը վերածում ենք PyTorch tensor-ի
+    img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
+    
+    # Ձևափոխում ըստ մոդելի տեսակի
+    if model_type == 'vgg19':
+        # VGG19 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
+        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
+        img_tensor = img_tensor.repeat(1, 3, 1, 1)  # Convert grayscale to RGB
+    elif model_type == 'cnn':
+        # CNN համար: (1, 1, height, width)
+        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
+    else:  # MLP համար
+        # MLP համար: հարթեցնել
+        img_tensor = img_tensor.view(1, -1)
+    
+    img_tensor = img_tensor.to(device)
+    
+    # Գուշակում
+    model.eval()
+    with torch.no_grad():
+        output = model(img_tensor)
+        _, predicted = torch.max(output, 1)
+    
+    return predicted.item()  # վերադարձնում ենք կանխատեսված թվանշանը
+
+def predict_custom_image_proba(
+    image_path,
+    model,
+    device=None,
+    model_type='cnn',
+    image_size=(28, 28)
+):
+    """
+    Անհատական նկարի կանխատեսում հավանականությունների հետ
+    
+    Args:
+        image_path: Նկարի ճանապահը
+        model: Մոդել
+        device: Սարք (ավտոմատ որոշվում է եթե None)
+        model_type: Մոդելի տեսակ ('cnn', 'mlp', 'vgg19')
+        image_size: Նկարի չափը (լռությամբ 28x28, բայց VGG19 համար կօգտագործվի 224x224)
+    
+    Returns:
+        Կանխատեսված դասը և հավանականությունը
+    """
+    from PIL import Image
+    import numpy as np
+    import torch.nn.functional as F
+    
+    # Սարքի կարգավորում
+    if device is None:
+        device = get_device()
+    
+    model, device = move_to_device(model, device)
+    
+    # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
+    img = Image.open(image_path).convert('L')
+    
+    # VGG19 համար օգտագործում ենք 224x224 չափը
+    if model_type == 'vgg19':
+        target_size = (224, 224)
+    else:
+        target_size = image_size
+    
+    # Նկարը փոքրացնենք նշված չափի
+    img = img.resize(target_size)
+    
+    # Նկարը վերածում ենք numpy զանգվածի
+    img_np = np.array(img)
+    
+    # Նկարը վերածում ենք PyTorch tensor-ի
+    img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
+    
+    # Ձևափոխում ըստ մոդելի տեսակի
+    if model_type == 'vgg19':
+        # VGG19 համար: (1, 1, 224, 224) -> (1, 3, 224, 224)
+        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
+        img_tensor = img_tensor.repeat(1, 3, 1, 1)  # Convert grayscale to RGB
+    elif model_type == 'cnn':
+        # CNN համար: (1, 1, height, width)
+        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
+    else:  # MLP համար
+        # MLP համար: հարթեցնել
+        img_tensor = img_tensor.view(1, -1)
+    
+    img_tensor = img_tensor.to(device)
+    
+    # Գուշակում
+    model.eval()
+    with torch.no_grad():
+        output = model(img_tensor)
+        
+        # ստանում ենք հավանականությունները
+        probabilities = F.softmax(output, dim=1)
+        
+        # Ամենամեծ հավանականությունն ու դասը
+        max_prob, predicted = torch.max(probabilities, 1)
+    
+    return predicted.item(), max_prob.item()  # վերադարձնում ենք կանխատեսված դասը և հավանականությունը
+
+# Keep the rest of the functions unchanged
 def predict_proba(
     model,
     image,
@@ -317,130 +539,6 @@ def visualize(
     image = image.view(28, 28).cpu().numpy()
     show_image(image, cmap='gray')
     return image
-
-def predict_custom_image(
-    image_path,
-    model,
-    device=None,
-    model_type='cnn',
-    image_size=(28, 28)
-):
-    """
-    Անհատական նկարի կանխատեսում
-    
-    Args:
-        image_path: Նկարի ճանապահը
-        model: Մոդել
-        device: Սարք (ավտոմատ որոշվում է եթե None)
-        model_type: Մոդելի տեսակ ('cnn' կամ 'mlp')
-        image_size: Նկարի չափը (լռությամբ 28x28)
-    
-    Returns:
-        Կանխատեսված դասը
-    """
-    from PIL import Image
-    import numpy as np
-    
-    # Սարքի կարգավորում
-    if device is None:
-        device = get_device()
-    
-    model, device = move_to_device(model, device)
-    
-    # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
-    img = Image.open(image_path).convert('L')
-    
-    # Նկարը փոքրացնենք նշված չափի
-    img = img.resize(image_size)
-    
-    # Նկարը վերածում ենք numpy զանգվածի
-    img_np = np.array(img)
-    
-    # Նկարը վերածում ենք PyTorch tensor-ի
-    img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
-    
-    # Ձևափոխում ըստ մոդելի տեսակի
-    if model_type == 'cnn':
-        # CNN համար: (1, 1, height, width)
-        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
-    else:  # MLP համար
-        # MLP համար: հարթեցնել
-        img_tensor = img_tensor.view(1, -1)
-    
-    img_tensor = img_tensor.to(device)
-    
-    # Գուշակում
-    model.eval()
-    with torch.no_grad():
-        output = model(img_tensor)
-        _, predicted = torch.max(output, 1)
-    
-    return predicted.item()  # վերադարձնում ենք կանխատեսված թվանշանը
-
-def predict_custom_image_proba(
-    image_path,
-    model,
-    device=None,
-    model_type='cnn',
-    image_size=(28, 28)
-):
-    """
-    Անհատական նկարի կանխատեսում հավանականությունների հետ
-    
-    Args:
-        image_path: Նկարի ճանապահը
-        model: Մոդել
-        device: Սարք (ավտոմատ որոշվում է եթե None)
-        model_type: Մոդելի տեսակ ('cnn' կամ 'mlp')
-        image_size: Նկարի չափը (լռությամբ 28x28)
-    
-    Returns:
-        Կանխատեսված դասը և հավանականությունը
-    """
-    from PIL import Image
-    import numpy as np
-    import torch.nn.functional as F
-    
-    # Սարքի կարգավորում
-    if device is None:
-        device = get_device()
-    
-    model, device = move_to_device(model, device)
-    
-    # Նկարի ներբեռնում՝ որպես մոխրագույն պատկեր (նույնիսկ եթե գունավոր է)
-    img = Image.open(image_path).convert('L')
-    
-    # Նկարը փոքրացնենք նշված չափի
-    img = img.resize(image_size)
-    
-    # Նկարը վերածում ենք numpy զանգվածի
-    img_np = np.array(img)
-    
-    # Նկարը վերածում ենք PyTorch tensor-ի
-    img_tensor = torch.tensor(img_np, dtype=torch.float32) / 255.0
-    
-    # Ձևափոխում ըստ մոդելի տեսակի
-    if model_type == 'cnn':
-        # CNN համար: (1, 1, height, width)
-        img_tensor = img_tensor.unsqueeze(0).unsqueeze(0)
-    else:  # MLP համար
-        # MLP համար: հարթեցնել
-        img_tensor = img_tensor.view(1, -1)
-    
-    img_tensor = img_tensor.to(device)
-    
-    # Գուշակում
-    model.eval()
-    with torch.no_grad():
-        output = model(img_tensor)
-        
-        # ստանում ենք հավանականությունները
-        probabilities = F.softmax(output, dim=1)
-        
-        # Ամենամեծ հավանականությունն ու դասը
-        max_prob, predicted = torch.max(probabilities, 1)
-    
-    return predicted.item(), max_prob.item()  # վերադարձնում ենք կանխատեսված դասը և հավանականությունը
 
 def load_image_from_url(url, label=None):
     """
