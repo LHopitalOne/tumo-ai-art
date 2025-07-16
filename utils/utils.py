@@ -10,6 +10,9 @@ import numpy as np
 
 from PIL import Image
 
+import tensorflow as tf
+import tensorflow_hub as hub
+
 from torch import Tensor as Data
 from torch.nn.functional import softmax as probabilities_function
 from torch.nn import ReLU as ActivationFunction
@@ -540,3 +543,38 @@ def load_image_from_url(url, label=None):
     img.save(filename)  # պահում ենք որպես ժամանակավոր ֆայլ
 
     return img
+
+def load_nst_model(model_url: str):
+    """
+    Load the TF‑Hub style transfer model.
+    """
+    return hub.load("https://tfhub.dev/google/magenta/arbitrary-image-stylization-v1-256/2")
+
+
+def load_image_tf(path: str, max_dim: int = 512) -> tf.Tensor:
+    """
+    Load and preprocess image for hub model: float32 [1, h, w, 3], range [0,1].
+    """
+    img = Image.open(path).convert('RGB')
+    long = max(img.size)
+    scale = max_dim / long
+    new_size = (round(img.size[0]*scale), round(img.size[1]*scale))
+    img = img.resize(new_size)
+    img = np.array(img) / 255.0
+    img = img[np.newaxis, ...].astype(np.float32)
+    return tf.convert_to_tensor(img)
+
+
+def stylize_image(model, content: tf.Tensor, style: tf.Tensor) -> tf.Tensor:
+    """
+    Run the hub model: returns stylized image tensor.
+    """
+    return model(tf.constant(content), tf.constant(style))[0]
+
+
+def alpha_blend(content: tf.Tensor, stylized: tf.Tensor, alpha: float) -> tf.Tensor:
+    """
+    Blend content and stylized images by alpha.
+    """
+    return content * (1 - alpha) + stylized * alpha
+
