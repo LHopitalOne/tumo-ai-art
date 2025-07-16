@@ -576,5 +576,8 @@ def alpha_blend(content: tf.Tensor, stylized: tf.Tensor, alpha: float) -> tf.Ten
     """
     Blend content and stylized images by alpha.
     """
-    return content * (1 - alpha) + stylized * alpha
+    content_shape = tf.shape(content)[1:3]
+    stylized_resized = tf.image.resize(stylized, content_shape)
+    # Blend
+    return content * (1 - alpha) + stylized_resized * alpha
 
