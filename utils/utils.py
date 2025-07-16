@@ -544,7 +544,7 @@ def load_image_from_url(url, label=None):
 
     return img
 
-def load_nst_model(model_url: str):
+def load_nst_model():
     """
     Load the TF‑Hub style transfer model.
     """
