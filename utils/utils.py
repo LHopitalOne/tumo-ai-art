@@ -551,18 +551,26 @@ def load_nst_model():
     return hub.load("https://tfhub.dev/google/magenta/arbitrary-image-stylization-v1-256/2")
 
 
-def load_image_tf(path: str, max_dim: int = 512) -> tf.Tensor:
+def load_image_tf(path: str,
+                  max_dim: int = None) -> (tf.Tensor, tf.TensorShape):
     """
-    Load and preprocess image for hub model: float32 [1, h, w, 3], range [0,1].
+    Load and preprocess image for hub model.
+    Returns:
+      - tensor: float32 [1, h, w, 3], range [0,1]
+      - orig_shape: (orig_h, orig_w)
+    If max_dim is set, resize so longest side == max_dim.
     """
     img = Image.open(path).convert('RGB')
-    long = max(img.size)
-    scale = max_dim / long
-    new_size = (round(img.size[0]*scale), round(img.size[1]*scale))
-    img = img.resize(new_size)
-    img = np.array(img) / 255.0
-    img = img[np.newaxis, ...].astype(np.float32)
-    return tf.convert_to_tensor(img)
+    orig_size = img.size  # (width, height)
+    if max_dim is not None:
+        long = max(img.size)
+        scale = max_dim / long
+        new_size = (round(img.size[0]*scale), round(img.size[1]*scale))
+        img = img.resize(new_size)
+    arr = np.array(img) / 255.0
+    arr = arr[np.newaxis, ...].astype(np.float32)
+    tensor = tf.convert_to_tensor(arr)
+    return tensor, tf.constant([orig_size[1], orig_size[0]])  # height, width
 
 
 def stylize_image(model, content: tf.Tensor, style: tf.Tensor) -> tf.Tensor:
@@ -572,12 +580,12 @@ def stylize_image(model, content: tf.Tensor, style: tf.Tensor) -> tf.Tensor:
     return model(tf.constant(content), tf.constant(style))[0]
 
 
-def alpha_blend(content: tf.Tensor, stylized: tf.Tensor, alpha: float) -> tf.Tensor:
+def alpha_blend(content: tf.Tensor,
+                stylized: tf.Tensor,
+                alpha: float) -> tf.Tensor:
     """
     Blend content and stylized images by alpha.
+    Assumes both are same shape.
     """
-    content_shape = tf.shape(content)[1:3]
-    stylized_resized = tf.image.resize(stylized, content_shape)
-    # Blend
-    return content * (1 - alpha) + stylized_resized * alpha
+    return content * (1 - alpha) + stylized * alpha
 
